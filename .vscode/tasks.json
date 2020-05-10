@@ -1,0 +1,15 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "MPIC++",
+            "type": "shell",
+            "command": "mpic++",
+            "args": ["main.cpp", "-o", "main"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}
