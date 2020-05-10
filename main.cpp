@@ -4,6 +4,7 @@
 #include <vector>
 #include <iostream>
 #include <cmath>
+int n = 1000;
 
 struct ToCalculate {
     double a;
@@ -18,8 +19,7 @@ private:
     double a, b, c;
     double starting_point, ending_point;
     double dx;
-    int n;
-
+    
     double calculate_formula(double x) const;
 
 public:
@@ -38,8 +38,9 @@ IntegralCalculator::IntegralCalculator(ToCalculate toBeCalculated) {
     this->c = toBeCalculated.c;
     this->starting_point = toBeCalculated.start;
     this->ending_point = toBeCalculated.end;
-    this->n = n;
     this->dx = (ending_point - starting_point) / n;
+    printf("Our values: %f, %f, %f, %f, %f, %d, %f\n",
+    a, b, c, starting_point, ending_point, n, dx);
 }
 
 double IntegralCalculator::calculate_formula(double x) const {
@@ -83,6 +84,13 @@ double IntegralCalculator::calculate_trapezoidal_rule() {
 int main(int argc, char *argv[])
 {
     MPI_Init(&argc, &argv);
+    int lengths[5] = {1,1,1,1,1};
+    MPI_Datatype types[5] = {MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE};
+    MPI_Aint displacements[5] = {0, sizeof(double), sizeof(double) * 2, sizeof(double) * 3,
+    sizeof(double) * 4};
+    MPI_Datatype ToCalculateMpi;
+    MPI_Type_create_struct(5, lengths, displacements, types, &ToCalculateMpi);
+    MPI_Type_commit(&ToCalculateMpi);
     int node, Nnodes, tag = 2;
     int finalized = 3;
     double data = 0;
@@ -90,7 +98,7 @@ int main(int argc, char *argv[])
 
     MPI_Comm_rank(MPI_COMM_WORLD, &node);
     MPI_Comm_size(MPI_COMM_WORLD, &Nnodes);
-    struct ToCalculate toBeCalculated[Nnodes];
+    
     if (node == 0)
     {
         double a = 1.0;
@@ -102,37 +110,24 @@ int main(int argc, char *argv[])
         double result = 0.0;
         double delta = (end - start)/Nnodes;
         for (int i = 0; i< Nnodes; i++) {
-            toBeCalculated[i].a = a;
-            toBeCalculated[i].b = b;
-            toBeCalculated[i].c = c;
-            toBeCalculated[i].end = start + delta * (i+1);
-            toBeCalculated[i].start = start + delta * i;
+            struct ToCalculate toBeCalculated;
+            toBeCalculated.a = a;
+            toBeCalculated.b = b;
+            toBeCalculated.c = c;
+            toBeCalculated.start = start + delta * i;
+            toBeCalculated.end = start + delta * (i+1);
             double i_st = start + delta * i;
             double i_end = start + delta * (i+1);
-            IntegralCalculator calculator(toBeCalculated[i]);
+            IntegralCalculator calculator(toBeCalculated);
             result += calculator.calculate_trapezoidal_rule();
         }
         printf("Result: %f\n", result);
         
-        // for (int i = 1; i < 4; i++)
-        // {
-        //     MPI_Send(&data, 1, MPI_DOUBLE, i, tag, MPI_COMM_WORLD);
-        // }
-        // recv = 0;
-        // for (int i = 1; i < 4; i++){
-        //     MPI_Recv(&rec, 1, MPI_INT, i, finalized, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        //     recv += rec;
-        // }
-        // printf("FInished value is: %d", recv);
-    }
-    else if (node > 0)
+        }
+    
+    if (node > 0)
     {
         printf("Node: %d\n", node);
-        // MPI_Recv(&data, 1, MPI_DOUBLE, 0, tag, MPI_COMM_WORLD,
-        //          MPI_STATUS_IGNORE);
-        // printf("Wezel %d odebral %f od wezla 0\n", node, data);
-        // printf("Wezel %d value: %d\n", node, f);
-        // MPI_Send(&f, 1, MPI_INT, 0, finalized, MPI_COMM_WORLD);
     }
     else
     {
