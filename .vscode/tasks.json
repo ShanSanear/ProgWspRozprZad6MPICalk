@@ -6,10 +6,20 @@
             "type": "shell",
             "command": "mpic++",
             "args": ["main.cpp", "-o", "main"],
+            "group": "build",
+            "dependsOrder": "sequence",
+        },
+        {
+            "label": "Build and deploy",
+            "type": "shell",
+            "command": "scp",
+            "args" : ["main", "mpi@node1:~/PWiR_P6/main"],
+            "dependsOn" : "MPIC++",
             "group": {
                 "kind": "build",
                 "isDefault": true
-            }
+            },
         }
+        
     ]
 }
