@@ -118,16 +118,20 @@ int main(int argc, char *argv[])
             toBeCalculated.end = start + delta * (i+1);
             double i_st = start + delta * i;
             double i_end = start + delta * (i+1);
-            IntegralCalculator calculator(toBeCalculated);
-            result += calculator.calculate_trapezoidal_rule();
+            printf("Sending to: %d", i+1);
+            MPI_Send(&toBeCalculated, 1, ToCalculateMpi, i+1, tag, MPI_COMM_WORLD);
         }
-        printf("Result: %f\n", result);
-        
-        }
+        printf("Ending with node 0\n");
+    }
     
     if (node > 0)
     {
         printf("Node: %d\n", node);
+        struct ToCalculate receivedCalculate;
+        MPI_Recv(&receivedCalculate, 1, ToCalculateMpi, 0, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        IntegralCalculator calc(receivedCalculate);
+        calc.calculate_trapezoidal_rule();
+
     }
     else
     {
