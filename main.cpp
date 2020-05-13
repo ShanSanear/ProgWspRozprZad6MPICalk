@@ -7,6 +7,7 @@
 #include <mpi.h>
 #include <plog/Log.h>
 #include <plog/Appenders/ConsoleAppender.h>
+#include <cmath>
 
 double A, B, C;
 
@@ -20,9 +21,13 @@ struct CalculateParameters
     double end_point;
 };
 
-double calculate_formula(double x)
+double calculate_quadratic_formula(double x)
 {
     return (A * (x * x) + B * x + C);
+}
+
+double calculate_pi_approx(double x) {
+    return (1 / (1 + std::pow(x, 2)));
 }
 
 double get_double_from_stdin(const char *message)
@@ -87,17 +92,31 @@ int main()
         PLOG_INFO << "Processing on single node";
         for (int i = 0; i <= N; i++)
         {
-            sum += calculate_formula(start_point + i * dx);
+            sum += calculate_quadratic_formula(start_point + i * dx);
         }
 
         sum *= dx;
 
         endTime = MPI_Wtime();
 
+        
+
         timeSingle = endTime - startTime;
         resultStream << "Single node result: " << static_cast<double>(sum);
         PLOG_INFO << resultStream.str();
         PLOG_INFO << "Single node time: " << timeSingle << " second(s)";
+        sum = 0;
+        double dt = 1.0 / N;
+        printf("My N: %d\n", N);
+        printf("My double: %f\n", dt);
+        printf("My double: %f\n", dx);
+        for (int i = 0; i <= N; i++) {
+            sum += calculate_pi_approx(dt * i);
+        }
+        sum *= dt * 4;
+
+        printf("My pi approx is: %f\n", sum);
+
         struct CalculateParameters calculateStruct;
         //There is no MPI_Barrier here because only one node can reach this section
         startTime = MPI_Wtime();
@@ -119,7 +138,7 @@ int main()
         PLOG_INFO << "Processing data on node 0";
         for (int i = 0; i <= N / numOfNodes; i++)
         {
-            sum += calculate_formula(start_point + i * dx);
+            sum += calculate_quadratic_formula(start_point + i * dx);
         }
 
         sum *= dx;
@@ -143,7 +162,7 @@ int main()
 
         for (int i = node * (N / numOfNodes); i <= node * N / numOfNodes + N / numOfNodes; i++)
         {
-            sum += calculate_formula(start_point + i * dx);
+            sum += calculate_quadratic_formula(start_point + i * dx);
         }
         sum *= dx;
     }
