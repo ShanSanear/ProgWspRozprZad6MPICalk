@@ -8,16 +8,16 @@
 #include <plog/Log.h>
 #include <plog/Appenders/ConsoleAppender.h>
 
-using namespace std;
 double A, B, C;
-int N;
-double startTime, endTime, parallelTimeTaken, timeSingle;
 
 struct CalculateParameters
 {
     double A;
     double B;
     double C;
+    int N;
+    double start_point;
+    double end_point;
 };
 
 double calculate_formula(double x)
@@ -43,25 +43,33 @@ int get_int_from_stdin(const char *message)
 
 int main()
 {
+    int N;
+    const int struct_size = 6;
     double sum, dx, start_point, end_point, result;
-    double functionParameters[3] = {0};
-    double functionLimits[2] = {0};
-    plog::RollingFileAppender<plog::CsvFormatter> fileAppender("Datalogger.log", 1048576, 5);
+    double startTime, endTime, parallelTimeTaken, timeSingle;
+    plog::RollingFileAppender<plog::CsvFormatter> fileAppender("Datalogger.txt", 1048576, 5);
     plog::ConsoleAppender<plog::TxtFormatter> consoleAppender;
     plog::init(plog::info, &fileAppender).addAppender(&consoleAppender);
     int node, numOfNodes;
     MPI_Init(NULL, NULL);
     MPI_Comm_size(MPI_COMM_WORLD, &numOfNodes);
     MPI_Comm_rank(MPI_COMM_WORLD, &node);
-    cout << setprecision(3) << fixed;
-    int lengths[4] = {1, 1, 1};
-    MPI_Datatype types[3] = {MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE};
-    MPI_Aint displacements[3] = {0, sizeof(double), sizeof(double) * 2};
+    int lengths[struct_size] = {1, 1, 1, 1, 1, 1};
+    MPI_Datatype types[struct_size] = {MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INTEGER, MPI_DOUBLE, MPI_DOUBLE};
+    MPI_Aint displacements[struct_size] = {
+        offsetof(CalculateParameters, A),
+        offsetof(CalculateParameters, B),
+        offsetof(CalculateParameters, C),
+        offsetof(CalculateParameters, N),
+        offsetof(CalculateParameters, start_point),
+        offsetof(CalculateParameters, end_point)
+        };
 
     MPI_Datatype mpiCalculateParametersDatatype;
-    MPI_Type_create_struct(3, lengths, displacements, types, &mpiCalculateParametersDatatype);
+    MPI_Type_create_struct(struct_size, lengths, displacements, types, &mpiCalculateParametersDatatype);
     MPI_Type_commit(&mpiCalculateParametersDatatype);
-
+    std::stringstream resultStream;
+    resultStream << std::fixed << std::setprecision(6);
     if (node == 0)
     {
         PLOG_INFO << "Getting input values";
@@ -87,22 +95,23 @@ int main()
         endTime = MPI_Wtime();
 
         timeSingle = endTime - startTime;
-        PLOG_INFO << "Single node result: " << sum;
+        resultStream << "Single node result: " << static_cast<double>(sum);
+        PLOG_INFO << resultStream.str();
         PLOG_INFO << "Single node time: " << timeSingle << " second(s)";
         struct CalculateParameters calculateStruct;
         //There is no MPI_Barrier here because only one node can reach this section
         startTime = MPI_Wtime();
-        functionLimits[0] = start_point;
-        functionLimits[1] = end_point;
         calculateStruct.A = A;
         calculateStruct.B = B;
         calculateStruct.C = C;
+        calculateStruct.N = N;
+        calculateStruct.start_point = start_point;
+        calculateStruct.end_point = end_point;
         PLOG_INFO << "Sending data to other nodes";
         for (int i = 1; i < numOfNodes; i++)
         {
             MPI_Send(&calculateStruct, 1, mpiCalculateParametersDatatype, i, 0, MPI_COMM_WORLD);
-            MPI_Send(&N, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
-            MPI_Send(functionLimits, 2, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+            
         }
 
         sum = 0;
@@ -119,14 +128,15 @@ int main()
     {
         struct CalculateParameters calcStruct;
         MPI_Recv(&calcStruct, 1, mpiCalculateParametersDatatype, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        MPI_Recv(&N, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        MPI_Recv(functionLimits, 2, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        
         PLOG_INFO << "Processing data, node: " << node;
-        start_point = functionLimits[0];
-        end_point = functionLimits[1];
+        
         A = calcStruct.A;
         B = calcStruct.B;
         C = calcStruct.C;
+        N = calcStruct.N;
+        start_point = calcStruct.start_point;
+        end_point = calcStruct.end_point;
 
         sum = 0;
         dx = (end_point - start_point) / N;
@@ -145,7 +155,9 @@ int main()
     {
         endTime = MPI_Wtime();
         parallelTimeTaken = endTime - startTime;
-        PLOG_INFO << "Parallized result: " << result;
+        resultStream.str(std::string());
+        resultStream << "Parallized result: " << static_cast<double>(result);
+        PLOG_INFO << resultStream.str();
         PLOG_INFO << "Parallized time: " << parallelTimeTaken << " second(s)";
     }
     MPI_Type_free(&mpiCalculateParametersDatatype);
