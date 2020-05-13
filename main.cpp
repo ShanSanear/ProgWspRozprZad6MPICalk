@@ -53,7 +53,7 @@ int main()
     int piPrecision = 20;
     int N_quadratic, N_Pi;
     const int struct_size = 7;
-    double sum, dx, start_point, end_point, result;
+    double sum_quadratic, sum_pi, dx, dt, start_point, end_point, result_quadratic, result_pi;
     double startTime, endTime, parallelTimeTaken, timeSingle;
     plog::RollingFileAppender<plog::CsvFormatter> fileAppender("Datalogger.txt", 1048576, 5);
     plog::ConsoleAppender<plog::TxtFormatter> consoleAppender;
@@ -85,40 +85,38 @@ int main()
         A = get_double_from_stdin("Specify a:");
         B = get_double_from_stdin("Specify b:");
         C = get_double_from_stdin("Specify c:");
-        N_quadratic = get_int_from_stdin("Specifiy N:");
-        start_point = get_double_from_stdin("Specify start point:");
-        end_point = get_double_from_stdin("Specify end point:");
+        start_point = get_double_from_stdin("Specify start point for quadratic function:");
+        end_point = get_double_from_stdin("Specify end point for quadratic function:");
+        N_quadratic = get_int_from_stdin("Specify N for quadratic function:");
+        N_Pi = get_int_from_stdin("Specify N for Pi:");
 
-        sum = 0;
+        sum_quadratic = 0;
         dx = (end_point - start_point) / N_quadratic;
 
         startTime = MPI_Wtime();
-        PLOG_INFO << "Processing on single node";
+        PLOG_INFO << "Calculating integral on single node";
         for (int i = 0; i <= N_quadratic; i++)
         {
-            sum += calculate_quadratic_formula(start_point + i * dx);
+            sum_quadratic += calculate_quadratic_formula(start_point + i * dx);
         }
 
-        sum *= dx;
-
-        endTime = MPI_Wtime();
+        sum_quadratic *= dx;
 
         
-
-        
-        resultStream << "Single node result: " << static_cast<double>(sum);
-        PLOG_INFO << resultStream.str();
         PLOG_INFO << "Calculating Pi on single node";
-        sum = 0;
-        double dt = 1.0 / N_quadratic;
-        for (int i = 0; i <= N_quadratic; i++) {
-            sum += calculate_pi_approx(dt * i);
+        sum_pi = 0;
+        dt = 1.0 / N_Pi;
+        for (int i = 0; i <= N_Pi; i++) {
+            sum_pi += calculate_pi_approx(dt * i);
         }
-        sum *= dt * 4;
+        sum_pi *= dt * 4;
+        endTime = MPI_Wtime();
         timeSingle = endTime - startTime;
+        resultStream << "Single node integral result: " << static_cast<double>(sum_quadratic);
+        PLOG_INFO << resultStream.str();
         resultStream.str(std::string());
         resultStream << std::setprecision(piPrecision);
-        resultStream << "Sinlge node pi: " << static_cast<double>(sum);
+        resultStream << "Sinlge node pi: " << static_cast<double>(sum_pi);
 
         PLOG_INFO << resultStream.str();
         PLOG_INFO << "Single node time: " << timeSingle << " second(s)";
@@ -132,7 +130,7 @@ int main()
         calculateStruct.N_quadratic = N_quadratic;
         calculateStruct.start_point = start_point;
         calculateStruct.end_point = end_point;
-        calculateStruct.N_Pi = N_quadratic;
+        calculateStruct.N_Pi = N_Pi;
         PLOG_INFO << "Sending data to other nodes";
         for (int i = 1; i < numOfNodes; i++)
         {
@@ -140,49 +138,71 @@ int main()
             
         }
 
-        sum = 0;
-        dx = (end_point - start_point) / N_quadratic;
-        PLOG_INFO << "Processing data on node 0";
+        sum_quadratic = 0;
+        sum_pi = 0;
+        PLOG_INFO << "Calculating integral, node: " << node;
         for (int i = 0; i <= N_quadratic / numOfNodes; i++)
         {
-            sum += calculate_quadratic_formula(start_point + i * dx);
+            sum_quadratic += calculate_quadratic_formula(start_point + i * dx);
         }
 
-        sum *= dx;
+        sum_quadratic *= dx;
+
+        PLOG_INFO << "Calculating Pi, node: " << node;
+        for (int i = 0; i <= N_Pi / numOfNodes; i++) {
+            sum_pi += calculate_pi_approx(dt * i);
+        }
+        sum_pi *= dt * 4;
     }
     else
     {
         struct CalculateParameters calcStruct;
         MPI_Recv(&calcStruct, 1, mpiCalculateParametersDatatype, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         
-        PLOG_INFO << "Processing data, node: " << node;
+        PLOG_INFO << "Calculating integral, node: " << node;
         
         A = calcStruct.A;
         B = calcStruct.B;
         C = calcStruct.C;
         N_quadratic = calcStruct.N_quadratic;
+        N_Pi = calcStruct.N_Pi;
         start_point = calcStruct.start_point;
         end_point = calcStruct.end_point;
 
-        sum = 0;
+        sum_quadratic = 0;
         dx = (end_point - start_point) / N_quadratic;
+        dt = 1.0 / N_Pi;
 
         for (int i = node * (N_quadratic / numOfNodes); i <= node * N_quadratic / numOfNodes + N_quadratic / numOfNodes; i++)
         {
-            sum += calculate_quadratic_formula(start_point + i * dx);
+            sum_quadratic += calculate_quadratic_formula(start_point + i * dx);
         }
-        sum *= dx;
+        sum_quadratic *= dx;
+
+        PLOG_INFO << "Calculating Pi, node: " << node;
+
+        for (int i = node * (N_Pi / numOfNodes); i <= node * N_Pi / numOfNodes + N_Pi / numOfNodes; i++)
+        {
+            sum_pi += calculate_pi_approx(i * dt);
+        }
+        sum_pi *= dt * 4;
     }
     PLOG_INFO << "Finished processing, node: " << node;
 
-    MPI_Reduce(&sum, &result, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&sum_quadratic, &result_quadratic, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&sum_pi, &result_pi, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    
     MPI_Barrier(MPI_COMM_WORLD);
     if (node == 0)
     {
         endTime = MPI_Wtime();
         parallelTimeTaken = endTime - startTime;
         resultStream.str(std::string());
-        resultStream << "Parallized result: " << static_cast<double>(result);
+        resultStream << "Parallized result: " << static_cast<double>(result_quadratic);
+        PLOG_INFO << resultStream.str();
+        resultStream.str(std::string());
+        resultStream << std::setprecision(piPrecision);
+        resultStream << "Parallized Pi result: " << static_cast<double>(result_pi);
         PLOG_INFO << resultStream.str();
         PLOG_INFO << "Parallized time: " << parallelTimeTaken << " second(s)";
     }
