@@ -16,9 +16,10 @@ struct CalculateParameters
     double A;
     double B;
     double C;
-    int N;
+    int N_quadratic;
     double start_point;
     double end_point;
+    int N_Pi;
 };
 
 double calculate_quadratic_formula(double x)
@@ -48,8 +49,10 @@ int get_int_from_stdin(const char *message)
 
 int main()
 {
-    int N;
-    const int struct_size = 6;
+    int standardPrecision = 6;
+    int piPrecision = 20;
+    int N_quadratic, N_Pi;
+    const int struct_size = 7;
     double sum, dx, start_point, end_point, result;
     double startTime, endTime, parallelTimeTaken, timeSingle;
     plog::RollingFileAppender<plog::CsvFormatter> fileAppender("Datalogger.txt", 1048576, 5);
@@ -59,38 +62,39 @@ int main()
     MPI_Init(NULL, NULL);
     MPI_Comm_size(MPI_COMM_WORLD, &numOfNodes);
     MPI_Comm_rank(MPI_COMM_WORLD, &node);
-    int lengths[struct_size] = {1, 1, 1, 1, 1, 1};
-    MPI_Datatype types[struct_size] = {MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INTEGER, MPI_DOUBLE, MPI_DOUBLE};
+    int lengths[struct_size] = {1, 1, 1, 1, 1, 1, 1};
+    MPI_Datatype types[struct_size] = {MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INTEGER, MPI_DOUBLE, MPI_DOUBLE, MPI_INTEGER};
     MPI_Aint displacements[struct_size] = {
         offsetof(CalculateParameters, A),
         offsetof(CalculateParameters, B),
         offsetof(CalculateParameters, C),
-        offsetof(CalculateParameters, N),
+        offsetof(CalculateParameters, N_quadratic),
         offsetof(CalculateParameters, start_point),
-        offsetof(CalculateParameters, end_point)
+        offsetof(CalculateParameters, end_point),
+        offsetof(CalculateParameters, N_Pi)
         };
 
     MPI_Datatype mpiCalculateParametersDatatype;
     MPI_Type_create_struct(struct_size, lengths, displacements, types, &mpiCalculateParametersDatatype);
     MPI_Type_commit(&mpiCalculateParametersDatatype);
     std::stringstream resultStream;
-    resultStream << std::fixed << std::setprecision(6);
+    resultStream << std::fixed << std::setprecision(standardPrecision);
     if (node == 0)
     {
         PLOG_INFO << "Getting input values";
         A = get_double_from_stdin("Specify a:");
         B = get_double_from_stdin("Specify b:");
         C = get_double_from_stdin("Specify c:");
-        N = get_int_from_stdin("Specifiy N:");
+        N_quadratic = get_int_from_stdin("Specifiy N:");
         start_point = get_double_from_stdin("Specify start point:");
         end_point = get_double_from_stdin("Specify end point:");
 
         sum = 0;
-        dx = (end_point - start_point) / N;
+        dx = (end_point - start_point) / N_quadratic;
 
         startTime = MPI_Wtime();
         PLOG_INFO << "Processing on single node";
-        for (int i = 0; i <= N; i++)
+        for (int i = 0; i <= N_quadratic; i++)
         {
             sum += calculate_quadratic_formula(start_point + i * dx);
         }
@@ -101,31 +105,34 @@ int main()
 
         
 
-        timeSingle = endTime - startTime;
+        
         resultStream << "Single node result: " << static_cast<double>(sum);
         PLOG_INFO << resultStream.str();
-        PLOG_INFO << "Single node time: " << timeSingle << " second(s)";
+        PLOG_INFO << "Calculating Pi on single node";
         sum = 0;
-        double dt = 1.0 / N;
-        printf("My N: %d\n", N);
-        printf("My double: %f\n", dt);
-        printf("My double: %f\n", dx);
-        for (int i = 0; i <= N; i++) {
+        double dt = 1.0 / N_quadratic;
+        for (int i = 0; i <= N_quadratic; i++) {
             sum += calculate_pi_approx(dt * i);
         }
         sum *= dt * 4;
+        timeSingle = endTime - startTime;
+        resultStream.str(std::string());
+        resultStream << std::setprecision(piPrecision);
+        resultStream << "Sinlge node pi: " << static_cast<double>(sum);
 
-        printf("My pi approx is: %f\n", sum);
-
+        PLOG_INFO << resultStream.str();
+        PLOG_INFO << "Single node time: " << timeSingle << " second(s)";
+        resultStream << std::setprecision(standardPrecision);
         struct CalculateParameters calculateStruct;
         //There is no MPI_Barrier here because only one node can reach this section
         startTime = MPI_Wtime();
         calculateStruct.A = A;
         calculateStruct.B = B;
         calculateStruct.C = C;
-        calculateStruct.N = N;
+        calculateStruct.N_quadratic = N_quadratic;
         calculateStruct.start_point = start_point;
         calculateStruct.end_point = end_point;
+        calculateStruct.N_Pi = N_quadratic;
         PLOG_INFO << "Sending data to other nodes";
         for (int i = 1; i < numOfNodes; i++)
         {
@@ -134,9 +141,9 @@ int main()
         }
 
         sum = 0;
-        dx = (end_point - start_point) / N;
+        dx = (end_point - start_point) / N_quadratic;
         PLOG_INFO << "Processing data on node 0";
-        for (int i = 0; i <= N / numOfNodes; i++)
+        for (int i = 0; i <= N_quadratic / numOfNodes; i++)
         {
             sum += calculate_quadratic_formula(start_point + i * dx);
         }
@@ -153,14 +160,14 @@ int main()
         A = calcStruct.A;
         B = calcStruct.B;
         C = calcStruct.C;
-        N = calcStruct.N;
+        N_quadratic = calcStruct.N_quadratic;
         start_point = calcStruct.start_point;
         end_point = calcStruct.end_point;
 
         sum = 0;
-        dx = (end_point - start_point) / N;
+        dx = (end_point - start_point) / N_quadratic;
 
-        for (int i = node * (N / numOfNodes); i <= node * N / numOfNodes + N / numOfNodes; i++)
+        for (int i = node * (N_quadratic / numOfNodes); i <= node * N_quadratic / numOfNodes + N_quadratic / numOfNodes; i++)
         {
             sum += calculate_quadratic_formula(start_point + i * dx);
         }
