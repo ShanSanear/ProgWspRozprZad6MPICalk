@@ -12,7 +12,7 @@
             "command": "mpicxx",
             "args": ["main.cpp", "-o", "main"],
             "group": "build",
-            "dependsOrder": "sequence",
+            "dependsOrder": "sequence"
             
         },
         {
